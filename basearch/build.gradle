@@ -1,0 +1,28 @@
+apply plugin: 'jetty'
+
+repositories {
+	flatDir {
+		dirs 'lib'
+	}
+}
+
+dependencies {
+	compile 'net.sourceforge.stripes:stripes:1.5.7',
+			'org.apache.shiro:shiro-core:1.2.2',
+			'org.apache.shiro:shiro-web:1.2.2'
+}
+
+sourceSets {
+    main {
+        java { srcDir 'src' }
+        resources { srcDir 'resources' }
+    }
+}
+
+gradle.taskGraph.whenReady {taskGraph ->
+    if (taskGraph.hasTask('release')) {
+        version = '1.0'
+    } else {
+        version = '1.0-SNAPSHOT'
+    }
+}
