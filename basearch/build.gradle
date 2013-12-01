@@ -1,28 +1,92 @@
 apply plugin: 'jetty'
 
+defaultTasks 'runDev'
+
+build.mustRunAfter clean
+jettyRunWar.mustRunAfter clean
+
+sourceCompatibility = 1.6
+
+
+// We use mavencentral for provided dependencies (tomcat libs)
 repositories {
-	flatDir {
-		dirs 'lib'
-	}
+	mavenCentral()
 }
 
+// We do not actually need all of the jars in lib directory for the
+// compile phase, but this way they are added automatically to the war
 dependencies {
-	compile 'net.sourceforge.stripes:stripes:1.5.7',
-			'org.apache.shiro:shiro-core:1.2.2',
-			'org.apache.shiro:shiro-web:1.2.2'
+	compile fileTree('lib')
+	providedCompile "javax.servlet:javax.servlet-api:3.0.1"
 }
 
 sourceSets {
     main {
         java { srcDir 'src' }
-        resources { srcDir 'resources' }
+        resources { srcDir 'resources/common' }
     }
 }
 
-gradle.taskGraph.whenReady {taskGraph ->
-    if (taskGraph.hasTask('release')) {
-        version = '1.0'
+war {
+	webInf { from 'WebContent/WEB-INF' }
+	metaInf { from 'build/tmp/meta' }
+}
+
+
+// Goal tasks
+task release(dependsOn: [clean, build])
+
+task runDev(dependsOn: jettyRunWar)
+
+task runProd(dependsOn: [clean, jettyRunWar])
+
+task testProd(dependsOn: test)
+
+
+// Utility tasks
+task copyPersistenceFile(type:Copy) {
+	from 'resources/persistence.xml'
+	into 'build/tmp/meta'
+}
+war.dependsOn copyPersistenceFile
+
+task copyContextFile(type:Copy) {
+	into 'build/tmp/meta'
+	include 'context.xml'
+}
+war.dependsOn copyContextFile
+
+task copyBuildDependentFiles(type:Copy) {
+	into sourceSets.main.output.resourcesDir
+	include '*.properties'
+}
+war.dependsOn copyBuildDependentFiles
+
+
+// Runtime dependent config
+gradle.taskGraph.whenReady { taskGraph ->
+	if (taskGraph.hasTask(release)) {
+		println 'Building production war'
+	}
+	if (taskGraph.hasTask(runDev)) {
+		jettyRunWar.doFirst { println 'Starting jetty in development mode' }
+	}
+	if (taskGraph.hasTask(runProd)) {
+		jettyRunWar.doFirst { println 'Starting jetty in production mode' }
+	}
+	if (taskGraph.hasTask(testProd)) {
+		println 'Running tests with production settings, where applicable'
+	}
+    if (taskGraph.hasTask(runProd) || taskGraph.hasTask(testProd) || taskGraph.hasTask(release)) {
+        println 'OpenJPA entity enhancer enabled'
+//        classes.doLast { println 'blablabla' }
+        copyContextFile.from 'resources/prod'
+        copyBuildDependentFiles.from 'resources/prod'
+        copyPersistenceFile.expand(cacheEnabled: 'true')
     } else {
-        version = '1.0-SNAPSHOT'
+        //JVM_OPENJPA_AGENT = '-javaagent:openjpa-all-2.2.0-SNAPSHOT.jar'
+        copyContextFile.from 'resources/dev'
+        copyBuildDependentFiles.from 'resources/dev'
+        copyPersistenceFile.expand(cacheEnabled: 'false')
     }
 }
