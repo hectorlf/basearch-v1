@@ -46,7 +46,7 @@ task testProd(dependsOn: test)
 // Utility tasks
 task copyPersistenceFile(type:Copy) {
 	from 'resources/persistence.xml'
-	into 'build/tmp/meta'
+	into 'build/tmp/meta/META-INF'
 }
 war.dependsOn copyPersistenceFile
 
@@ -61,6 +61,14 @@ task copyBuildDependentFiles(type:Copy) {
 	include '*.properties'
 }
 war.dependsOn copyBuildDependentFiles
+
+task openjpaEnhance(type:JavaExec) {
+	mustRunAfter copyPersistenceFile, copyBuildDependentFiles
+	
+	classpath fileTree('lib')
+	main 'org.apache.openjpa.ant.PCEnhancerTask'
+}
+war.dependsOn openjpaEnhance
 
 
 // Runtime dependent config
@@ -79,12 +87,13 @@ gradle.taskGraph.whenReady { taskGraph ->
 	}
     if (taskGraph.hasTask(runProd) || taskGraph.hasTask(testProd) || taskGraph.hasTask(release)) {
         println 'OpenJPA entity enhancer enabled'
-//        classes.doLast { println 'blablabla' }
         copyContextFile.from 'resources/prod'
         copyBuildDependentFiles.from 'resources/prod'
         copyPersistenceFile.expand(cacheEnabled: 'true')
     } else {
+    jvmArgs = [ '-javaagent:' + datanucleusCore.path + '=-api=JPA,org.granite.test.externalizers' ]
         //JVM_OPENJPA_AGENT = '-javaagent:openjpa-all-2.2.0-SNAPSHOT.jar'
+        openjpaEnhance.enabled = false
         copyContextFile.from 'resources/dev'
         copyBuildDependentFiles.from 'resources/dev'
         copyPersistenceFile.expand(cacheEnabled: 'false')
